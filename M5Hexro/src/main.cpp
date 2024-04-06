@@ -1,13 +1,21 @@
-#include <M5Stack.h>
+#include <M5Unified.h>
+// #include <M5Stack.h>
+
+// #define DEBUG_PA
 
 #include <Wire.h>
+
+#ifdef DEBUG_PA
 #include <SparkFun_I2C_Mux_Arduino_Library.h> // http://librarymanager/All#SparkFun_I2C_Mux https://github.com/sparkfun/SparkFun_I2C_Mux_Arduino_Library
+#endif
 
 #include <M5GFX.h>
 #include "M5_UNIT_8SERVO.h"
 
+#ifdef DEBUG_PA
 // PA HUB
 QWIICMUX i2cMux;
+#endif
 
 // 8SERVO
 M5GFX display;
@@ -18,6 +26,7 @@ char info[50];
 // ----
 void setup()
 {
+#ifdef DEBUG_PA
     // PA HUB
     Serial.begin(115200);
     delay(100);
@@ -30,17 +39,29 @@ void setup()
     }
     Serial.println("Mux detected");
     Serial.println("Begin scanning for I2C devices");
+#endif
 
     // 8SERVO
-    M5.begin();
+    auto cfg = M5.config();
+    M5.begin(cfg);
+    M5.Power.begin();
+
     display.begin();
     canvas.setColorDepth(1);  // mono color
     canvas.setFont(&fonts::efontCN_14);
     canvas.createSprite(display.width(), display.height());
     canvas.setPaletteColor(1, GREEN);
-    while (!unit_8servo.begin(&Wire, 21, 22, M5_UNIT_8SERVO_DEFAULT_ADDR)) {
-        Serial.println("extio Connect Error");
-        M5.Lcd.print("extio Connect Error");
+
+    const int ERROR_COUNT_MAX = 3;
+    int error_count = 0;
+    // M5Stack Core2 PortB : 32
+    // M5Stack Basic PortB : 26
+    while (!unit_8servo.begin(&Wire, 32, 33, M5_UNIT_8SERVO_DEFAULT_ADDR)) {
+        if(error_count < ERROR_COUNT_MAX) {
+            Serial.println("extio Connect Error");
+            M5.Lcd.print("extio Connect Error");
+            error_count++;
+        }
         delay(100);
     }
     unit_8servo.setAllPinMode(SERVO_CTL_MODE);
@@ -51,6 +72,9 @@ void setup()
 // ----
 void loop()
 {
+    M5.update();
+
+#ifdef DEBUG_PA
     // PA HUB
     for (uint8_t channel = 0; channel < 8; channel++)
     {
@@ -69,6 +93,7 @@ void loop()
         Serial.println();
     }
     delay(1000);
+#endif
 
     // 8SERVO
     canvas.fillSprite(0);
