@@ -20,6 +20,14 @@
         while(1);\
     }
 
+// Sound
+#define TONE_C5 523.251
+#define TONE_E5 659.255
+#define TONE_G5 783.991
+#define TONE_C6 (TONE_C5 * 2)
+#define TONE_E6 (TONE_E5 * 2)
+#define TONE_G6 (TONE_G5 * 2)
+
 // for debug
 #define MONITOR_ENABLE
 // Serial.printf("[Info] %d\n", __LINE__);
@@ -39,6 +47,7 @@ M5_UNIT_8SERVO unit_8servo[NUM_SERVO_UNITS_MAX];
 uint8_t angle_list[ANGLE_LIST_SIZE] = {0, 45, 90, 135, 180};// for demo
 uint8_t i_angle = 0;
 
+// --
 #define ID_TIMER_MOTION 0
 const uint64_t TIMER_MOTION_INTERBAL_US = 500000; // interval : 500ms
 hw_timer_t *timerMotion = NULL;
@@ -47,6 +56,55 @@ void IRAM_ATTR onTimerMotion()
     int time_ms = millis();
 
     Serial.println("[Info] onTimerMotion, time_ms:" + String(time_ms));
+
+#if 0
+    for(uint8_t ch_pahub = 0; ch_pahub < NUM_CHANNELS_PAHUB; ch_pahub++) {
+        // set PA_HUB channel
+        i2cMux.setPort(ch_pahub);
+        Serial.printf("[Info] L%d, CH_PaHUB: %d\n", __LINE__, ch_pahub);
+
+        switch(ch_pahub) {
+            case 0: // for 8servo unit 0
+            case 1: // for 8servo unit 1
+                for(uint8_t servo_ch = 0; servo_ch < NUM_SERVOS_PER_UNIT; servo_ch++) {
+                    // set servo angle
+                    unit_8servo[ch_pahub].setServoAngle(servo_ch, angle_list[i_angle]);
+                    // monitor
+                    Serial.printf("[Info] L%d, CH:%d DEG: %d\n", __LINE__, servo_ch, angle_list[i_angle]);
+
+#ifdef MONITOR_ENABLE
+                    // canvas.drawRect(0, servo_ch * 20 + 75, 200, 15, 1);
+                    // canvas.fillRect(0, servo_ch * 20 + 75, map(angle_list[i_angle], 0, 180, 0, 200), 15, 1);
+                    // canvas.setCursor(220, servo_ch * 28 + 10);
+                    // canvas.setTextSize(1);
+                    // canvas.printf("CH:%d DEG: %d\n", servo_ch, angle_list[i_angle]);
+#endif
+                }
+                break;
+            default:
+                break;
+        }
+        i_angle++;
+        i_angle = i_angle % ANGLE_LIST_SIZE;
+
+#ifdef MONITOR_ENABLE
+        // canvas.pushSprite(0, 0);
+#endif
+        // vTaskDelay(50);    // 500
+    }
+#endif
+}
+
+void beep()
+{
+    M5.Speaker.tone(TONE_E5, 200);
+}
+
+void beep_init_done()
+{
+    M5.Speaker.tone(TONE_C5, 500);
+    M5.Speaker.tone(TONE_E5, 500);
+    M5.Speaker.tone(TONE_G5, 500);
 }
 
 // ----
@@ -108,6 +166,7 @@ void setup()
 
     // init done
     Serial.printf("[Info] init done.\n");
+    beep_init_done();
 }
 
 
@@ -117,6 +176,26 @@ void loop()
 {
     M5.update();
 
+    // Button Event
+    //   BtnA : stop timerMotion
+    //   BtnC : restart timerMotion
+    if(M5.BtnA.wasPressed()) {
+        Serial.printf("[Info] L%d, BtnA was pressed.\n", __LINE__);
+        timerAlarmDisable(timerMotion);
+        beep();
+        while(1) {
+            // pause
+            M5.update();
+            if(M5.BtnC.wasPressed()) {
+                // restart
+                timerAlarmEnable(timerMotion);
+                beep();
+                Serial.printf("[Info] L%d, BtnC was pressed.\n", __LINE__);
+                break;
+            }
+        }
+    }
+
     // 8SERVO
 #ifdef MONITOR_ENABLE
     canvas.fillSprite(0);
@@ -125,6 +204,7 @@ void loop()
     // canvas.drawString("FW VERSION: " + String(unit_8servo[].getVersion()), 10, 40);
 #endif
 
+#if 0 // TODO: port to timer interrupt
     for(uint8_t ch_pahub = 0; ch_pahub < NUM_CHANNELS_PAHUB; ch_pahub++) {
         // set PA_HUB channel
         i2cMux.setPort(ch_pahub);
@@ -159,4 +239,7 @@ void loop()
 #endif
         vTaskDelay(50);    // 500
     }
+#endif
+
+    vTaskDelay(50);
 }
