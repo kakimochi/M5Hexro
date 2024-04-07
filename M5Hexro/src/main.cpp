@@ -122,6 +122,56 @@ void beep_init_done()
     M5.Speaker.tone(TONE_G5, 500);
 }
 
+void setServoAngle(uint8_t ch, uint8_t angle_deg)
+{
+    // TODO: DEBUG
+    if(angle_deg < 0 && 180 < angle_deg) {
+        Serial.printf("[Warn] L%d over angle:%d\n", __LINE__, angle_deg);
+        return;
+    }
+
+    uint8_t ch_pahub = ch / NUM_SERVOS_PER_UNIT;
+    uint8_t ch_servo = ch % NUM_SERVOS_PER_UNIT;
+    Serial.printf("[Debug] L%d ch_pahub:%d, ch_servo:%d\n", __LINE__,ch_pahub, ch_servo);
+
+    i2cMux.setPort(ch_pahub);
+    Serial.printf("[Info] L%d, CH_PaHUB: %d\n", __LINE__, ch_pahub);
+
+    unit_8servo[ch_pahub].setServoAngle(ch_servo, angle_deg);
+    Serial.printf("[Info] L%d, CH:%d DEG: %d\n", __LINE__, ch_servo, angle_deg);
+}
+
+typedef enum {
+    FrontL = 0,
+    FrontR,
+    CenterL,
+    CenterR,
+    BackL,
+    BackR 
+} LegLayout;
+
+typedef enum {
+    Leg = 0,
+    Foot
+} LegStructure;
+
+typedef enum {
+    // 仮定：おそらく上側であるLegから角度を決めて、
+    // その後にFootを決めてやったほうがmotionが安定しそうに思う
+    FL_Leg = 0,
+    FR_Leg,
+    CL_Leg,
+    CR_Leg,
+    BL_Leg,
+    BR_Leg,
+    FL_Foot,
+    FR_Foot,
+    CL_Foot,
+    CR_Foot,
+    BL_Foot,
+    BR_Foot
+} ServoAssign;
+
 // ----
 void setup()
 {
@@ -219,6 +269,16 @@ void loop()
     }
 
     // 8SERVO
+#if 0   //debug
+    if(motion_trigger) {
+        setServoAngle(0, 10);
+        setServoAngle(1, 20);
+        setServoAngle(8, 30);
+
+        motion_trigger = false; // reset trigger
+    }
+#endif
+#if 1   // demo
     if(motion_trigger) {
         for(uint8_t ch_pahub = 0; ch_pahub < NUM_CHANNELS_PAHUB; ch_pahub++) {
             // set PA_HUB channel
@@ -256,6 +316,6 @@ void loop()
 
         motion_trigger = false; // reset trigger
     }
-
+#endif
     vTaskDelay(50);
 }
