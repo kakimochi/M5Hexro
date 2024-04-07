@@ -13,6 +13,10 @@
 #define PIN_PA_SDA 32   // for Core2, 26 for M5Stack Basic
 #define PIN_PA_SCL 33   // for Core2, 27 for M5Stack Basic
 
+// GUI
+#define APP_NAME "M5Hexro"
+#define APP_VERSION "ver.1.0"
+
 #define NUM_SERVOS_PER_UNIT 8
 #define NUM_CHANNELS_PAHUB 6
 #define NUM_SERVO_UNITS_MAX 2
@@ -72,17 +76,16 @@ void logf(MessageLevel level, const char *format, ...) {
 #define TONE_G6 (TONE_G5 * 2)
 
 // for debug
-#define MONITOR_MOTION_ENABLE
+// #define MONITOR_MOTION_ENABLE
 // Serial.printf("[Info] %d\n", __LINE__);
 
 // Static Members
 // PA HUB
 QWIICMUX i2cMux;
-// 8Servo
-#ifdef MONITOR_MOTION_ENABLE
+// GUI
 M5GFX display;
 M5Canvas canvas(&display);
-#endif
+// 8Servo
 M5_UNIT_8SERVO unit_8servo[NUM_SERVO_UNITS_MAX];
 
 // for application
@@ -136,14 +139,6 @@ void setup()
     Serial.printf("[Info] PaHUB detected. Begin scanning for I2C devices");
 
     // 8Servo init
-#ifdef MONITOR_MOTION_ENABLE
-    display.begin();
-    canvas.setColorDepth(1);  // mono color
-    canvas.setFont(&fonts::efontCN_14);
-    canvas.createSprite(display.width(), display.height());
-    canvas.setPaletteColor(1, GREEN);
-#endif
-
     for(uint8_t ch_pahub = 0; ch_pahub < NUM_CHANNELS_PAHUB; ch_pahub++)
     {
         // set PA_HUB channel
@@ -170,7 +165,22 @@ void setup()
         }
     }
 
-    // timer must start after device init done
+    // GUI
+    M5.Display.begin();
+    M5.Display.startWrite();    // Occupies the SPI bus to speed up drawing
+        M5.Display.setColorDepth(1); // mono color
+        M5.Display.fillScreen(BLACK);
+        M5.Display.setFont(&fonts::efontCN_14);
+        M5.Display.setTextColor(GOLD);
+        M5.Display.setTextSize(2);  // 14*2
+        M5.Display.drawString(APP_NAME, 7, 7);
+        M5.Display.drawString(APP_VERSION, 7, 7 + (14*2));
+        M5.Display.setTextSize(1);  // 14
+        M5.Display.drawString("- push BtnA to pause motion.", 7, 7 + (14*2)*2);
+        M5.Display.drawString("- push BtnC to restart motion.", 7, 7 + (14*2)*2+14);
+    M5.Display.endWrite();
+
+    // timer must start after all devices init done
     timerMotion = timerBegin(ID_TIMER_MOTION, 80, true);   // divider:80 for 1us count
     timerAttachInterrupt(timerMotion, &onTimerMotion, true);
     timerAlarmWrite(timerMotion, TIMER_MOTION_INTERVAL_US, true);
@@ -200,22 +210,15 @@ void loop()
             M5.update();
             if(M5.BtnC.wasPressed()) {
                 // restart
+                Serial.printf("[Info] L%d, BtnC was pressed.\n", __LINE__);
                 timerAlarmEnable(timerMotion);
                 beep();
-                Serial.printf("[Info] L%d, BtnC was pressed.\n", __LINE__);
                 break;
             }
         }
     }
 
     // 8SERVO
-#ifdef MONITOR_MOTION_ENABLE
-    canvas.fillSprite(0);
-    canvas.setTextSize(2);
-    canvas.drawString("SERVO CTL MODE", 10, 10);
-    // canvas.drawString("FW VERSION: " + String(unit_8servo[].getVersion()), 10, 40);
-#endif
-
     if(motion_trigger) {
         for(uint8_t ch_pahub = 0; ch_pahub < NUM_CHANNELS_PAHUB; ch_pahub++) {
             // set PA_HUB channel
