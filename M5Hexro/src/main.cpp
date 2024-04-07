@@ -39,6 +39,16 @@ M5_UNIT_8SERVO unit_8servo[NUM_SERVO_UNITS_MAX];
 uint8_t angle_list[ANGLE_LIST_SIZE] = {0, 45, 90, 135, 180};// for demo
 uint8_t i_angle = 0;
 
+#define ID_TIMER_MOTION 0
+const uint64_t TIMER_MOTION_INTERBAL_US = 500000; // interval : 500ms
+hw_timer_t *timerMotion = NULL;
+void IRAM_ATTR onTimerMotion()
+{
+    int time_ms = millis();
+
+    Serial.println("[Info] onTimerMotion, time_ms:" + String(time_ms));
+}
+
 // ----
 void setup()
 {
@@ -90,6 +100,13 @@ void setup()
         }
     }
 
+    // timer must start after device init done
+    timerMotion = timerBegin(ID_TIMER_MOTION, 80, true);   // divider:80 for 1us count
+    timerAttachInterrupt(timerMotion, &onTimerMotion, true);
+    timerAlarmWrite(timerMotion, TIMER_MOTION_INTERBAL_US, true);
+    timerAlarmEnable(timerMotion);
+
+    // init done
     Serial.printf("[Info] init done.\n");
 }
 
