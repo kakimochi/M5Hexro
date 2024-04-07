@@ -1,5 +1,4 @@
 #include <M5Unified.h>
-#include <M5GFX.h>
 
 // PA HUB
 #include <Wire.h>
