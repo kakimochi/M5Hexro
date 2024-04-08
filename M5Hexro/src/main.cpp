@@ -95,7 +95,7 @@ uint8_t i_angle = 0;
 
 // Timer Interrupt
 #define ID_TIMER_MOTION 0
-const uint64_t TIMER_MOTION_INTERVAL_US = 500000; // interval : 500ms
+const uint64_t TIMER_MOTION_INTERVAL_US = 500000; // interval : 500ms, 30ms
 hw_timer_t *timerMotion = NULL;
 bool motion_trigger = false;
 void IRAM_ATTR onTimerMotion()
@@ -122,24 +122,6 @@ void beep_init_done()
     M5.Speaker.tone(TONE_G5, 500);
 }
 
-void setServoAngle(uint8_t ch, uint8_t angle_deg)
-{
-    // TODO: DEBUG
-    if(angle_deg < 0 && 180 < angle_deg) {
-        Serial.printf("[Warn] L%d over angle:%d\n", __LINE__, angle_deg);
-        return;
-    }
-
-    uint8_t ch_pahub = ch / NUM_SERVOS_PER_UNIT;
-    uint8_t ch_servo = ch % NUM_SERVOS_PER_UNIT;
-    Serial.printf("[Debug] L%d ch_pahub:%d, ch_servo:%d\n", __LINE__,ch_pahub, ch_servo);
-
-    i2cMux.setPort(ch_pahub);
-    Serial.printf("[Info] L%d, CH_PaHUB: %d\n", __LINE__, ch_pahub);
-
-    unit_8servo[ch_pahub].setServoAngle(ch_servo, angle_deg);
-    Serial.printf("[Info] L%d, CH:%d DEG: %d\n", __LINE__, ch_servo, angle_deg);
-}
 
 typedef enum {
     FrontL = 0,
@@ -147,12 +129,14 @@ typedef enum {
     CenterL,
     CenterR,
     BackL,
-    BackR 
+    BackR,
+    NUM_LegLayout
 } LegLayout;
 
 typedef enum {
     Leg = 0,
-    Foot
+    Foot,
+    NUM_LegStructure
 } LegStructure;
 
 typedef enum {
@@ -169,8 +153,79 @@ typedef enum {
     CL_Foot,
     CR_Foot,
     BL_Foot,
-    BR_Foot
+    BR_Foot,
+    NUM_ServoAssign
 } ServoAssign;
+
+void setServoAngle(uint8_t ch, uint8_t angle_deg)
+{
+    // TODO: DEBUG
+    if(angle_deg < 0 && 180 < angle_deg) {
+        Serial.printf("[Warn] L%d over angle:%d [deg]\n", __LINE__, angle_deg);
+        return;
+    }
+
+    uint8_t ch_pahub = ch / NUM_SERVOS_PER_UNIT;
+    uint8_t ch_servo = ch % NUM_SERVOS_PER_UNIT;
+    Serial.printf("[Debug] L%d ch_pahub:%d, ch_servo:%d\n", __LINE__,ch_pahub, ch_servo);
+
+    i2cMux.setPort(ch_pahub);
+    // Serial.printf("[Info] L%d, CH_PaHUB: %d\n", __LINE__, ch_pahub);
+
+    unit_8servo[ch_pahub].setServoAngle(ch_servo, angle_deg);
+    Serial.printf("[Info] L%d, CH:%d DEG: %d\n", __LINE__, ch_servo, angle_deg);
+}
+
+typedef enum {
+    PoseOrigin = 0,
+    PoseIdle,
+    PoseStretching,
+    Num_MotionPattern
+} MotionPattern;
+
+uint8_t motionPattern = MotionPattern::PoseOrigin;
+uint8_t frame = 0;
+uint8_t count = 0;
+void poseOrigin()
+{
+    setServoAngle(FL_Leg,  90);
+    setServoAngle(FR_Leg,  90);
+    setServoAngle(CL_Leg,  90);
+    setServoAngle(CR_Leg,  90);
+    setServoAngle(BL_Leg,  90);
+    setServoAngle(BR_Leg,  90);
+    setServoAngle(FL_Foot, 90);
+    setServoAngle(FR_Foot, 90);
+    setServoAngle(CL_Foot, 90);
+    setServoAngle(CR_Foot, 90);
+    setServoAngle(BL_Foot, 90);
+    setServoAngle(BR_Foot, 90);
+}
+
+void poseIdle()
+{
+    setServoAngle(FL_Leg,  90);
+    setServoAngle(FR_Leg,  90);
+    setServoAngle(CL_Leg,  90);
+    setServoAngle(CR_Leg,  90);
+    setServoAngle(BL_Leg,  90);
+    setServoAngle(BR_Leg,  90);
+    setServoAngle(FL_Foot, 90 + 10);
+    setServoAngle(FR_Foot, 90 + 10);
+    setServoAngle(CL_Foot, 90 + 10);
+    setServoAngle(CR_Foot, 90 + 10);
+    setServoAngle(BL_Foot, 90 + 10);
+    setServoAngle(BR_Foot, 90 + 10);
+}
+
+void poseStretching(uint8_t frame)
+{
+    for(int i=0; i<NUM_ServoAssign; i++) {
+        setServoAngle(i, (90 - 30) + frame * 5);
+    }
+}
+
+
 
 // ----
 void setup()
@@ -228,6 +283,12 @@ void setup()
         M5.Display.setTextSize(1);  // 14
         M5.Display.drawString("- push BtnA to pause motion.", 7, 7 + (14*2)*2);
         M5.Display.drawString("- push BtnC to restart motion.", 7, 7 + (14*2)*2+14);
+        M5.Display.drawRect( 20, 220, 70, 20, GOLD);
+        M5.Display.drawString("pause", 20+5, 220+2);
+        M5.Display.drawRect(120, 220, 70, 20, GOLD);
+        M5.Display.drawString("pattern", 120+5, 220+2);
+        M5.Display.drawRect(220, 220, 70, 20, GOLD);
+        M5.Display.drawString("restart", 220+5, 220+2);
     M5.Display.endWrite();
 
     // timer must start after all devices init done
@@ -251,6 +312,7 @@ void loop()
     // Button Event
     //   BtnA : pause timerMotion
     //   BtnC : restart timerMotion
+    //   BtnB : select motion pattern
     if(M5.BtnA.wasPressed()) {
         Serial.printf("[Info] L%d, BtnA was pressed.\n", __LINE__);
         timerAlarmDisable(timerMotion);
@@ -267,18 +329,41 @@ void loop()
             }
         }
     }
+    if(M5.BtnB.wasPressed()) {
+        // select motion pattern
+        Serial.printf("[Info] L%d, BtnB was pressed.\n", __LINE__);
+        motionPattern++;
+        if(motionPattern >= MotionPattern::Num_MotionPattern) {
+            motionPattern = 0;
+        }
+        beep();
+    }
 
-    // 8SERVO
-#if 0   //debug
     if(motion_trigger) {
-        setServoAngle(0, 10);
-        setServoAngle(1, 20);
-        setServoAngle(8, 30);
+        switch(motionPattern) {
+            default:
+            case MotionPattern::PoseOrigin:
+                poseOrigin();
+                break;
+            case MotionPattern::PoseIdle:
+                poseIdle();
+                break;
+            case MotionPattern::PoseStretching:
+                if(0<frame && frame<=11) {
+                    count++;
+                } else if(11<frame && frame<=23) {
+                    count--;
+                }
 
+                poseStretching(count);
+
+                frame = (frame>=23)? frame=0 : frame+1;
+                break;
+        }
         motion_trigger = false; // reset trigger
     }
-#endif
-#if 1   // demo
+
+#if 0   // demo
     if(motion_trigger) {
         for(uint8_t ch_pahub = 0; ch_pahub < NUM_CHANNELS_PAHUB; ch_pahub++) {
             // set PA_HUB channel
