@@ -95,7 +95,8 @@ uint8_t i_angle = 0;
 
 // Timer Interrupt
 #define ID_TIMER_MOTION 0
-const uint64_t TIMER_MOTION_INTERVAL_US = 500000; // interval : 500ms, 30ms
+const uint64_t TIMER_MOTION_INTERVAL_US = 30000;     // interval : 30ms
+// const uint64_t TIMER_MOTION_INTERVAL_US = 500000; // interval : 500ms
 hw_timer_t *timerMotion = NULL;
 bool motion_trigger = false;
 void IRAM_ATTR onTimerMotion()
@@ -184,8 +185,6 @@ typedef enum {
 } MotionPattern;
 
 uint8_t motionPattern = MotionPattern::PoseOrigin;
-uint8_t frame = 0;
-uint8_t count = 0;
 void poseOrigin()
 {
     setServoAngle(FL_Leg,  90);
@@ -218,10 +217,26 @@ void poseIdle()
     setServoAngle(BR_Foot, 90 + 10);
 }
 
-void poseStretching(uint8_t frame)
+static uint8_t count;
+static int8_t polarity = +1;
+void poseStretching()
 {
+    const uint8_t step = 3;
+    const uint8_t count_max = 23;
     for(int i=0; i<NUM_ServoAssign; i++) {
-        setServoAngle(i, (90 - 30) + frame * 5);
+        uint8_t angle = (90 - step*count_max/2) + step * count;
+        Serial.printf("[Info] (i, count, angle) = (%2d, %2d, %3d)\n", i, count, angle);
+        setServoAngle(i, angle);
+    }
+    if(count<=0) {
+        polarity = +1;
+    } else if(count>=count_max) {
+        polarity = -1;
+    }
+    if(polarity == +1) {
+        count++;
+    } else {
+        count--;
     }
 }
 
@@ -349,15 +364,7 @@ void loop()
                 poseIdle();
                 break;
             case MotionPattern::PoseStretching:
-                if(0<frame && frame<=11) {
-                    count++;
-                } else if(11<frame && frame<=23) {
-                    count--;
-                }
-
-                poseStretching(count);
-
-                frame = (frame>=23)? frame=0 : frame+1;
+                poseStretching();
                 break;
         }
         motion_trigger = false; // reset trigger
