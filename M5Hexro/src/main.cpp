@@ -95,8 +95,8 @@ uint8_t i_angle = 0;
 
 // Timer Interrupt
 #define ID_TIMER_MOTION 0
-const uint64_t TIMER_MOTION_INTERVAL_US = 30000;     // interval : 30ms
-// const uint64_t TIMER_MOTION_INTERVAL_US = 500000; // interval : 500ms
+// const uint64_t TIMER_MOTION_INTERVAL_US = 30000;     // interval : 30ms
+const uint64_t TIMER_MOTION_INTERVAL_US = 500000; // interval : 500ms
 hw_timer_t *timerMotion = NULL;
 bool motion_trigger = false;
 void IRAM_ATTR onTimerMotion()
@@ -244,12 +244,8 @@ void MotionStretching()
 
 void MotionWalk()
 {
-    // typedef struct TripodGaitPattern {
-    //     int frame_count;
-    //     float theta[3*NUM_Legs];
-    // } TripodGaitPattern;
-
-    float tripod_gait_pattern[] = {
+    const uint8_t count_max = 22;
+    float tripod_gait_pattern[22][1+3*NUM_Legs] = {
         {1, 1.079, -0.917, -103.54, 11.426, -9.204, -113.651, -0.549, -1.232, -104.438, 343.332, -1.1, -100.144, 359.469, -0.632, -102.636, 366.779, -0.208, -84.904},
         {2, 2.153, -0.025, -104.4, 11.337, -9.148, -113.605, -1.113, -0.688, -106.194, 343.425, -1.107, -100.174, 358.957, 0.515, -102.582, 366.748, -0.199, -85.031},
         {3, 3.217, 0.848, -105.202, 11.19, -9.055, -113.527, -1.692, -0.192, -107.887, 343.58, -1.119, -100.223, 358.465, 1.612, -102.464, 366.695, -0.183, -85.241},
@@ -274,11 +270,18 @@ void MotionWalk()
         {22, 16.42, 1.52, -102.852, 1.692, -2.808, -105.2, -11.19, -6.61, -116.368, 356.783, -1.783, -102.549, 353.305, 2.45, -87.822, 361.535, -1.027, -99.839},
     };
 
-    int frames = sizeof(tripod_gait_pattern)/sizeof(tripod_gait_pattern[0]);
-    for(int i=0; i<frames+1; i++) {
-            Serial.printf("%d", int(tripod_gait_pattern[i].frame_count));
-            // setServoAngle();
+    // for(int i=1; i<=22; i++) {
+    Serial.printf("%d, \n", int(tripod_gait_pattern[count][0]));
+    for(int leg=0; leg<6;leg++) {
+        for(int joint=0; joint<3; joint++) {
+            Serial.printf("%.3f,", tripod_gait_pattern[count][1+joint+leg*3]);
+        }
     }
+    Serial.printf("\n");
+    // }
+    count++;
+    if(count > count_max)
+        count = 1;
 }
 
 void MotionDebug()
