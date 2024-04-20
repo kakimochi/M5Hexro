@@ -229,7 +229,7 @@ static uint8_t count;
 static int8_t polarity = +1;
 void MotionStretching()
 {
-    const uint8_t step = 3;
+    const uint8_t step = 2;
     const uint8_t count_max = 11;
     for(int i=0; i<NUM_SERVOS; i++) {
         uint8_t angle = (90 - step*count_max/2) + step * count;
