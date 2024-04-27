@@ -87,11 +87,13 @@ M5GFX display;
 M5Canvas canvas(&display);
 // 8Servo
 M5_UNIT_8SERVO unit_8servo[NUM_SERVO_UNITS_MAX];
+// Battery
+int battery_level = -1;
 
 // for application
-#define ANGLE_LIST_SIZE 5
-uint8_t angle_list[ANGLE_LIST_SIZE] = {0, 45, 90, 135, 180}; // for demo
-uint8_t i_angle = 0;
+const unsigned long interval_10sec = 10000;
+unsigned long pre_ms = 0;
+unsigned long current_ms = 0;
 
 // Timer Interrupt
 #define ID_TIMER_MOTION 0
@@ -319,6 +321,22 @@ void MotionWalk()
         count = 0;
 }
 
+void gui_disp_batterylevel()
+{
+    battery_level = M5.Power.getBatteryLevel();
+
+    int pos_x = M5.Lcd.width() - 14/2 * (4+1);
+    int pos_y = 7;
+    M5.Display.startWrite();    // Occupies the SPI bus to speed up drawing
+        M5.Display.setTextColor(GOLD);
+        M5.Display.setTextSize(1);
+        M5.Display.fillRect(pos_x, pos_y, 320, 14*1, BLACK);    // clear
+        M5.Display.drawString(String(battery_level)+"%", pos_x, pos_y);
+    M5.Display.endWrite();
+
+
+}
+
 void gui_disp_pattern(uint8_t pattern)
 {
     std::string str_pattern = "";
@@ -398,6 +416,8 @@ void setup()
     }
 
     // GUI
+    battery_level = M5.Power.getBatteryLevel();
+    
     M5.Display.begin();
     M5.Display.startWrite();    // Occupies the SPI bus to speed up drawing
         M5.Display.setColorDepth(1); // mono color
@@ -407,7 +427,8 @@ void setup()
         M5.Display.setTextSize(2);  // 14*2
         M5.Display.drawString(APP_NAME, 7, 7);
         M5.Display.setTextSize(1);  // 14
-        M5.Display.drawString(APP_VERSION, M5.Lcd.width() - 14/2 * 8, 7);     // 8 characters in "ver.1.0 "
+        M5.Display.drawString(APP_VERSION, 7 + 14*2 * 7, 7);     // 8 characters in "ver.1.0 "
+        M5.Display.drawString(String(battery_level)+"%", M5.Lcd.width() - 14/2 * (4+1), 7);
         M5.Display.drawString("- push BtnA to pause motion", 7*2, 7 + (14*2)*2);
         M5.Display.drawString("- push BtnB to select motion", 7*2, 7 + (14*2)*2+14);
         M5.Display.drawString("- push BtnC to restart motion", 7*2, 7 + (14*2)*2+14*2);
@@ -426,6 +447,9 @@ void setup()
     timerAttachInterrupt(timerMotion, &onTimerMotion, true);
     timerAlarmWrite(timerMotion, TIMER_MOTION_INTERVAL_US, true);
     timerAlarmEnable(timerMotion);
+
+    // application timer
+    pre_ms = millis();
 
     // init done
     Serial.printf("[Info] init done.\n");
@@ -490,44 +514,12 @@ void loop()
         motion_trigger = false; // reset trigger
     }
 
-#if 0   // demo
-    if(motion_trigger) {
-        for(uint8_t ch_pahub = 0; ch_pahub < NUM_CHANNELS_PAHUB; ch_pahub++) {
-            // set PA_HUB channel
-            i2cMux.setPort(ch_pahub);
-            Serial.printf("[Info] L%d, CH_PaHUB: %d\n", __LINE__, ch_pahub);
-
-            switch(ch_pahub) {
-                case 0: // for 8servo unit 0
-                case 1: // for 8servo unit 1
-                    for(uint8_t servo_ch = 0; servo_ch < NUM_SERVOS_PER_UNIT; servo_ch++) {
-                        // set servo angle
-                        unit_8servo[ch_pahub].setServoAngle(servo_ch, angle_list[i_angle]);
-                        Serial.printf("[Info] L%d, CH:%d DEG: %d\n", __LINE__, servo_ch, angle_list[i_angle]);
-
-    #ifdef MONITOR_MOTION_ENABLE
-                        canvas.drawRect(0, servo_ch * 20 + 75, 200, 15, 1);
-                        canvas.fillRect(0, servo_ch * 20 + 75, map(angle_list[i_angle], 0, 180, 0, 200), 15, 1);
-                        canvas.setCursor(220, servo_ch * 28 + 10);
-                        canvas.setTextSize(1);
-                        canvas.printf("CH:%d DEG: %d\n", servo_ch, angle_list[i_angle]);
-    #endif
-                    }
-                    break;
-                default:
-                    break;
-            }
-
-    #ifdef MONITOR_MOTION_ENABLE
-            canvas.pushSprite(0, 0);
-    #endif
-            // vTaskDelay(5);
-        }
-        i_angle++;
-        i_angle = i_angle % ANGLE_LIST_SIZE;
-
-        motion_trigger = false; // reset trigger
+    // application timer
+    current_ms = millis();
+    if((current_ms - pre_ms) >= interval_10sec) {
+        gui_disp_batterylevel();
+        pre_ms = current_ms;
     }
-#endif
+
     vTaskDelay(50);
 }
