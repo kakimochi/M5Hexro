@@ -189,6 +189,7 @@ typedef enum {
     MP_MotionOrigin,
     MP_MotionIdle,
     MP_MotionStretching,
+    MP_MotionTapping,
     MP_MotionWalk,
     Num_MotionPattern
 } MotionPattern;
@@ -323,6 +324,25 @@ void MotionWalk()
         count = 0;
 }
 
+void MotionTapping()
+{
+    const int pos_init = 90;
+    const int pos_idle = 60;
+
+    setServoAngle(FL_Leg,  pos_init);
+    setServoAngle(FR_Leg,  pos_init);
+    setServoAngle(CL_Leg,  pos_init);
+    setServoAngle(CR_Leg,  pos_init);
+    setServoAngle(BL_Leg,  pos_init);
+    setServoAngle(BR_Leg,  pos_init);
+    setServoAngle(FL_Foot, 60);
+    setServoAngle(FR_Foot, 90);
+    setServoAngle(CL_Foot, 90);
+    setServoAngle(CR_Foot, 60);
+    setServoAngle(BL_Foot, 60);
+    setServoAngle(BR_Foot, 90);
+}
+
 void gui_disp_batterylevel()
 {
     battery_level = M5.Power.getBatteryLevel();
@@ -356,6 +376,9 @@ void gui_disp_pattern(uint8_t pattern)
         break;
     case MotionPattern::MP_MotionWalk:
         str_pattern = "motion walk";
+        break;
+    case MotionPattern::MP_MotionTapping:
+        str_pattern = "motion tapping";
         break;
     default:
         str_pattern = "unknown motion";
@@ -507,6 +530,9 @@ void loop()
                 break;
             case MotionPattern::MP_MotionWalk:
                 MotionWalk();
+                break;
+            case MotionPattern::MP_MotionTapping:
+                MotionTapping();
                 break;
             default:
                 break;
