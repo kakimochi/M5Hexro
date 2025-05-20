@@ -23,6 +23,12 @@
 #define ID_8SERVO_UNIT_0 0      // PA_HUB 0 : 8Servo Unit 0
 #define ID_8SERVO_UNIT_1 1      // PA_HUB 1 : 8Servo Unit 1
 
+// Hexapod Physical Parameters
+const float SIDE_LENGTH = 0.1;
+const float LONG1[6] = {0.04, 0.04, 0.04, 0.04, 0.04, 0.04};
+const float LONG2[6] = {0.08, 0.08, 0.08, 0.08, 0.08, 0.08};
+const float LONG3[6] = {0.08, 0.08, 0.08, 0.08, 0.08, 0.08};
+
 // Utility
 #if 0
 typedef enum {
