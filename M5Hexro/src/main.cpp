@@ -1,13 +1,19 @@
 #include <M5Unified.h>
 
+// PA HUB
 #include <Wire.h>
 #include <SparkFun_I2C_Mux_Arduino_Library.h>
+// http://librarymanager/All#SparkFun_I2C_Mux
+// https://github.com/sparkfun/SparkFun_I2C_Mux_Arduino_Library
 
+// 8Servo
 #include "M5_UNIT_8SERVO.h"
 
+// Hardware Config
 #define PIN_PA_SDA 32   // for Core2, 26 for M5Stack Basic
 #define PIN_PA_SCL 33   // for Core2, 27 for M5Stack Basic
 
+// GUI
 #define APP_NAME "M5Hexro"
 #define APP_VERSION "ver.1.0"
 
@@ -17,6 +23,7 @@
 #define ID_8SERVO_UNIT_0 0      // PA_HUB 0 : 8Servo Unit 0
 #define ID_8SERVO_UNIT_1 1      // PA_HUB 1 : 8Servo Unit 1
 
+// Utility
 #if 0
 typedef enum {
     DEBUG = 0,
@@ -60,6 +67,7 @@ void logf(MessageLevel level, const char *format, ...) {
         while(1);\
     }
 
+// Beep Sound
 #define TONE_C5 523.251
 #define TONE_E5 659.255
 #define TONE_G5 783.991
@@ -67,19 +75,29 @@ void logf(MessageLevel level, const char *format, ...) {
 #define TONE_E6 (TONE_E5 * 2)
 #define TONE_G6 (TONE_G5 * 2)
 
+// for debug
+// #define MONITOR_MOTION_ENABLE
+// Serial.printf("[Info] %d\n", __LINE__);
 
+// Static Members
+// PA HUB
 QWIICMUX i2cMux;
+// GUI
 M5GFX display;
 M5Canvas canvas(&display);
+// 8Servo
 M5_UNIT_8SERVO unit_8servo[NUM_SERVO_UNITS_MAX];
+// Battery
 int battery_level = -1;
 
+// for application
 const unsigned long interval_10sec = 10000;
 const unsigned long interval_5sec  =  5000;
 const unsigned long interval_1sec  =  1000;
 unsigned long pre_ms = 0;
 unsigned long current_ms = 0;
 
+// Timer Interrupt
 #define ID_TIMER_MOTION 0
 const uint64_t TIMER_MOTION_INTERVAL_US = 50000;     // interval : 50ms
 hw_timer_t *timerMotion = NULL;
@@ -95,6 +113,7 @@ void IRAM_ATTR onTimerMotion()
     motion_trigger = true;
 }
 
+// user functions
 void beep()
 {
     M5.Speaker.tone(TONE_E5, 200);
@@ -142,10 +161,13 @@ typedef enum {
 
 void setServoAngle(uint8_t ch, uint8_t angle_deg)
 {
+    // TODO: DEBUG
+    // Hardware Limit
     if(angle_deg < 0 && 180 < angle_deg) {
         Serial.printf("[Warn] HW Limit, L%02d over angle:%d [deg]\n", __LINE__, ch, angle_deg);
         return;
     }
+    // Software Limit
     if(angle_deg < 45 && 135 < angle_deg) {
         Serial.printf("[Warn] SW Limit, L%02d over angle:%d [deg]\n", __LINE__, ch, angle_deg);
         return;
@@ -153,10 +175,13 @@ void setServoAngle(uint8_t ch, uint8_t angle_deg)
 
     uint8_t ch_pahub = ch / NUM_SERVOS_PER_UNIT;
     uint8_t ch_servo = ch % NUM_SERVOS_PER_UNIT;
+    // Serial.printf("[Debug] L%d ch_pahub:%d, ch_servo:%d\n", __LINE__,ch_pahub, ch_servo);
 
     i2cMux.setPort(ch_pahub);
+    // Serial.printf("[Info] L%d, CH_PaHUB: %d\n", __LINE__, ch_pahub);
 
     unit_8servo[ch_pahub].setServoAngle(ch_servo, angle_deg);
+    // Serial.printf("[Info] L%d, CH:%d DEG: %d\n", __LINE__, ch_servo, angle_deg);
 }
 
 typedef enum {
@@ -207,10 +232,10 @@ void MotionIdle()
 
 static uint8_t count;
 static int8_t polarity = +1;
-const uint8_t count_max = 11; // Fixed value for motion patterns
 void MotionStretching()
 {
     const uint8_t step = 2;
+    const uint8_t count_max = 11;
     for(int i=0; i<NUM_SERVOS; i++) {
         uint8_t angle = (90 - step*count_max/2) + step * count;
         Serial.printf("[Info] (i, count, angle) = (%2d, %2d, %3d)\n", i, count, angle);
@@ -228,90 +253,75 @@ void MotionStretching()
     }
 }
 
-const float WALK_STEP_HEIGHT = 30.0;     // Maximum height of leg lift during step (degrees)
-const float WALK_STRIDE_LENGTH = 30.0;   // Forward/backward movement range (degrees)
-const float WALK_NEUTRAL_LEG = 90.0;     // Neutral position for leg servos
-const float WALK_NEUTRAL_FOOT = 60.0;    // Neutral position for foot servos
-const float WALK_FOOT_GROUND = 75.0;     // Foot angle when on ground
-const float WALK_FOOT_LIFTED = 45.0;     // Foot angle when lifted
-
-const bool LEG_IN_GROUP1[NUM_LEGS] = {
-    true,   // FrontL
-    false,  // FrontR
-    false,  // CenterL
-    true,   // CenterR
-    true,   // BackL
-    false   // BackR
+float pattern_walk[][1+NUM_LEG_STRUCTURE*NUM_LEGS] = {
+    { 0 ,90.0,61.812,66.206,75.879,90.0,61.812,116.565,60.301,90.0,61.812,80.104,63.008 },
+    { 1 ,86.414,52.743,66.499,75.749,91.898,53.936,116.384,60.315,91.702,51.918,80.157,62.918 },
+    { 2 ,82.912,43.688,67.361,75.36,93.986,46.319,115.841,60.355,93.213,42.614,80.319,62.658 },
+    { 3 ,79.571,35.268,68.739,74.713,96.248,39.3,114.933,60.424,94.539,34.747,80.59,62.258 },
+    { 4 ,76.457,28.292,70.555,73.814,98.653,33.46,113.661,60.526,95.691,29.024,80.976,61.767 },
+    { 5 ,73.622,23.529,72.708,72.676,101.151,29.67,112.024,60.662,96.681,25.794,81.481,61.241 },
+    { 6 ,71.105,21.464,75.088,71.331,103.671,28.93,110.026,60.829,97.52,25.049,82.114,60.741 },
+    { 7 ,68.93,22.214,77.587,69.824,106.123,31.894,107.678,61.02,98.219,26.579,82.881,60.332 },
+    { 8 ,67.112,25.597,80.106,68.219,108.404,38.24,104.998,61.225,98.787,30.109,83.795,60.069 },
+    { 9 ,65.657,31.213,82.565,66.592,110.402,46.627,102.018,61.426,99.231,35.358,84.864,60.005 },
+    { 10 ,64.568,38.513,84.903,65.021,112.01,55.549,98.783,61.602,99.559,42.038,86.102,60.181 },
+    { 11 ,63.842,46.893,87.081,63.583,113.139,64.133,95.352,61.733,99.775,49.847,87.519,60.625 },
+    { 12 ,63.48,55.797,89.076,62.343,113.72,72.117,91.798,61.803,99.883,58.477,89.124,61.347 },
+    { 13 ,63.48,60.305,89.076,57.856,113.72,75.846,91.798,57.305,99.883,62.986,89.124,56.842 },
+    { 14 ,63.842,60.331,87.081,50.078,113.139,75.587,95.352,48.181,99.775,62.807,87.519,47.139 },
+    { 15 ,64.568,60.386,84.903,42.705,112.01,75.069,98.783,39.35,99.559,62.473,86.102,38.45 },
+    { 16 ,65.657,60.471,82.565,36.185,110.402,74.294,102.018,31.547,99.231,62.021,84.864,31.586 },
+    { 17 ,67.112,60.59,80.106,31.245,108.404,73.273,104.998,25.595,98.787,61.504,83.795,27.091 },
+    { 18 ,68.93,60.742,77.587,28.862,106.123,72.027,107.678,22.144,98.219,60.984,82.881,25.121 },
+    { 19 ,71.105,60.922,75.088,29.941,103.671,70.594,110.026,21.492,97.52,60.522,82.114,25.546 },
+    { 20 ,73.622,61.122,72.708,34.711,101.151,69.03,112.024,23.597,96.681,60.179,81.481,28.111 },
+    { 21 ,76.457,61.327,70.555,42.282,98.653,67.404,113.661,28.157,95.691,60.01,80.976,32.536 },
+    { 22 ,79.571,61.518,68.739,51.094,96.248,65.794,114.933,34.69,94.539,60.061,80.59,38.538 },
+    { 23 ,82.912,61.674,67.361,59.91,93.986,64.281,115.841,42.605,93.213,60.368,80.319,45.821 },
+    { 24 ,86.414,61.777,66.499,68.202,91.898,62.935,116.384,51.31,91.702,60.951,80.157,54.078 },
+    { 25 ,90.0,61.812,66.206,75.879,90.0,61.812,116.565,60.301,90.0,61.812,80.104,63.008 },
+    { 26 ,86.414,52.743,66.499,75.749,91.898,53.936,116.384,60.315,91.702,51.918,80.157,62.918 },
+    { 27 ,82.912,43.688,67.361,75.36,93.986,46.319,115.841,60.355,93.213,42.614,80.319,62.658 },
+    { 28 ,79.571,35.268,68.739,74.713,96.248,39.3,114.933,60.424,94.539,34.747,80.59,62.258 },
+    { 29 ,76.457,28.292,70.555,73.814,98.653,33.46,113.661,60.526,95.691,29.024,80.976,61.767 },
+    { 30 ,73.622,23.529,72.708,72.676,101.151,29.67,112.024,60.662,96.681,25.794,81.481,61.241 },
+    { 31 ,71.105,21.464,75.088,71.331,103.671,28.93,110.026,60.829,97.52,25.049,82.114,60.741 },
+    { 32 ,68.93,22.214,77.587,69.824,106.123,31.894,107.678,61.02,98.219,26.579,82.881,60.332 },
+    { 33 ,67.112,25.597,80.106,68.219,108.404,38.24,104.998,61.225,98.787,30.109,83.795,60.069 },
+    { 34 ,65.657,31.213,82.565,66.592,110.402,46.627,102.018,61.426,99.231,35.358,84.864,60.005 },
+    { 35 ,64.568,38.513,84.903,65.021,112.01,55.549,98.783,61.602,99.559,42.038,86.102,60.181 },
+    { 36 ,63.842,46.893,87.081,63.583,113.139,64.133,95.352,61.733,99.775,49.847,87.519,60.625 },
+    { 37 ,63.48,55.797,89.076,62.343,113.72,72.117,91.798,61.803,99.883,58.477,89.124,61.347 },
+    { 38 ,63.48,60.305,89.076,57.856,113.72,75.846,91.798,57.305,99.883,62.986,89.124,56.842 },
+    { 39 ,63.842,60.331,87.081,50.078,113.139,75.587,95.352,48.181,99.775,62.807,87.519,47.139 },
+    { 40 ,64.568,60.386,84.903,42.705,112.01,75.069,98.783,39.35,99.559,62.473,86.102,38.45 },
+    { 41 ,65.657,60.471,82.565,36.185,110.402,74.294,102.018,31.547,99.231,62.021,84.864,31.586 },
+    { 42 ,67.112,60.59,80.106,31.245,108.404,73.273,104.998,25.595,98.787,61.504,83.795,27.091 },
+    { 43 ,68.93,60.742,77.587,28.862,106.123,72.027,107.678,22.144,98.219,60.984,82.881,25.121 },
+    { 44 ,71.105,60.922,75.088,29.941,103.671,70.594,110.026,21.492,97.52,60.522,82.114,25.546 },
+    { 45 ,73.622,61.122,72.708,34.711,101.151,69.03,112.024,23.597,96.681,60.179,81.481,28.111 },
+    { 46 ,76.457,61.327,70.555,42.282,98.653,67.404,113.661,28.157,95.691,60.01,80.976,32.536 },
+    { 47 ,79.571,61.518,68.739,51.094,96.248,65.794,114.933,34.69,94.539,60.061,80.59,38.538 },
+    { 48 ,82.912,61.674,67.361,59.91,93.986,64.281,115.841,42.605,93.213,60.368,80.319,45.821 },
+    { 49 ,86.414,61.777,66.499,68.202,91.898,62.935,116.384,51.31,91.702,60.951,80.157,54.078 },
 };
 
-unsigned long walkStartTime = 0;
-const unsigned long WALK_CYCLE_DURATION = 1000; // Full walk cycle in milliseconds
-
-float constrainServoAngle(float angle) {
-    if (angle < 45.0) return 45.0;
-    if (angle > 135.0) return 135.0;
-    return angle;
-}
-
-void calculateTripodGait(float phase, bool isGroup1, float& legAngle, float& footAngle) {
-    
-    if ((isGroup1 && phase < 0.5) || (!isGroup1 && phase >= 0.5)) {
-        float liftPhase;
-        
-        if (isGroup1) {
-            liftPhase = phase * 2.0; // 0.0 to 1.0 during first half of cycle
-        } else {
-            liftPhase = (phase - 0.5) * 2.0; // 0.0 to 1.0 during second half of cycle
-        }
-        
-        float legProgress = sin(liftPhase * PI);
-        
-        legAngle = WALK_NEUTRAL_LEG - WALK_STRIDE_LENGTH/2 + WALK_STRIDE_LENGTH * legProgress;
-        
-        footAngle = WALK_NEUTRAL_FOOT - WALK_STEP_HEIGHT * sin(liftPhase * PI);
-    } 
-    else {
-        float groundPhase;
-        
-        if (isGroup1) {
-            groundPhase = (phase - 0.5) * 2.0; // 0.0 to 1.0 during second half of cycle
-        } else {
-            groundPhase = phase * 2.0; // 0.0 to 1.0 during first half of cycle
-        }
-        
-        legAngle = WALK_NEUTRAL_LEG + WALK_STRIDE_LENGTH/2 - WALK_STRIDE_LENGTH * groundPhase;
-        
-        footAngle = WALK_FOOT_GROUND;
-    }
-    
-    legAngle = constrainServoAngle(legAngle);
-    footAngle = constrainServoAngle(footAngle);
-}
-
+int count_max = sizeof(pattern_walk) / sizeof(pattern_walk[0]);
 
 void MotionWalk()
 {
-    if (walkStartTime == 0) {
-        walkStartTime = millis();
+    Serial.printf("[DEBUG] %d, ", int(pattern_walk[count][0]));
+    for(int leg=0; leg<NUM_LEGS;leg++) {
+        for(int joint=0; joint<NUM_LEG_STRUCTURE; joint++) {
+            Serial.printf("%.3f,", pattern_walk[count][1+joint+leg*NUM_LEG_STRUCTURE]);
+            setServoAngle(joint+leg*NUM_LEG_STRUCTURE, pattern_walk[count][1+joint+leg*NUM_LEG_STRUCTURE]);
+        }
     }
-    
-    unsigned long currentTime = millis();
-    unsigned long elapsedTime = currentTime - walkStartTime;
-    float phase = (float)(elapsedTime % WALK_CYCLE_DURATION) / WALK_CYCLE_DURATION;
-    
-    Serial.printf("[DEBUG] Walk phase: %.3f\n", phase);
-    
-    for (int leg = 0; leg < NUM_LEGS; leg++) {
-        float legAngle, footAngle;
-        bool isGroup1 = LEG_IN_GROUP1[leg];
-        
-        calculateTripodGait(phase, isGroup1, legAngle, footAngle);
-        
-        setServoAngle(leg * NUM_LEG_STRUCTURE + Leg, legAngle);
-        setServoAngle(leg * NUM_LEG_STRUCTURE + Foot, footAngle);
-        
-        Serial.printf("Leg %d: %.3f, %.3f\n", leg, legAngle, footAngle);
-    }
+    Serial.printf("\n");
+ 
+    count++;
+    if(count >= count_max)
+        count = 0;
 }
 
 void MotionTapping()
@@ -406,6 +416,7 @@ void gui_disp_pattern(uint8_t pattern)
     M5.Display.endWrite();
 }
 
+// ----
 void setup()
 {
     auto cfg = M5.config();
@@ -413,6 +424,7 @@ void setup()
     M5.Power.begin();
     delay(100);
 
+    // I2C init
     Wire.begin(PIN_PA_SDA, PIN_PA_SCL);
     if (!i2cMux.begin(0x70, Wire)) {
         Serial.printf("[Error] PaHUB not detected. Freezing...");
@@ -420,8 +432,10 @@ void setup()
     }
     Serial.printf("[Info] PaHUB detected. Begin scanning for I2C devices");
 
+    // 8Servo init
     for(uint8_t ch_pahub = 0; ch_pahub < NUM_CHANNELS_PAHUB; ch_pahub++)
     {
+        // set PA_HUB channel
         if(!i2cMux.setPort(ch_pahub)) {
             Serial.printf("[Error] PaHUB set Port %d error.\n", ch_pahub);
             ASSERT(0, __LINE__);
@@ -445,6 +459,7 @@ void setup()
         }
     }
 
+    // GUI
     battery_level = M5.Power.getBatteryLevel();
     
     M5.Display.begin();
@@ -471,29 +486,40 @@ void setup()
 
     gui_disp_pattern(motionPattern);
 
+    // timer must start after all devices init done
     timerMotion = timerBegin(ID_TIMER_MOTION, 80, true);   // divider:80 for 1us count
     timerAttachInterrupt(timerMotion, &onTimerMotion, true);
     timerAlarmWrite(timerMotion, TIMER_MOTION_INTERVAL_US, true);
     timerAlarmEnable(timerMotion);
 
+    // application timer
     pre_ms = millis();
 
+    // init done
     Serial.printf("[Info] init done.\n");
     beep_init_done();
 }
 
 
+
+// ----
 void loop()
 {
     M5.update();
 
+    // Button Event
+    //   BtnA : pause timerMotion
+    //   BtnC : restart timerMotion
+    //   BtnB : select motion pattern
     if(M5.BtnA.wasPressed()) {
         Serial.printf("[Info] L%d, BtnA was pressed.\n", __LINE__);
         timerAlarmDisable(timerMotion);
         beep();
         while(1) {
+            // pause
             M5.update();
             if(M5.BtnC.wasPressed()) {
+                // restart
                 Serial.printf("[Info] L%d, BtnC was pressed.\n", __LINE__);
                 timerAlarmEnable(timerMotion);
                 beep();
@@ -502,6 +528,7 @@ void loop()
         }
     }
     if(M5.BtnB.wasPressed()) {
+        // select motion pattern
         Serial.printf("[Info] L%d, BtnB was pressed.\n", __LINE__);
         motionPattern++;
         if(motionPattern >= MotionPattern::Num_MotionPattern) {
@@ -534,6 +561,7 @@ void loop()
         motion_trigger = false; // reset trigger
     }
 
+    // application timer
     current_ms = millis();
     if((current_ms - pre_ms) >= interval_10sec) {
         gui_disp_batterylevel();
