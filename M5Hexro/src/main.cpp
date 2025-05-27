@@ -1,4 +1,5 @@
 #include <M5Unified.h>
+#include <esp32-hal-timer.h>
 
 // PA HUB
 #include <Wire.h>
@@ -22,6 +23,8 @@
 #define NUM_SERVO_UNITS_MAX 2
 #define ID_8SERVO_UNIT_0 0      // PA_HUB 0 : 8Servo Unit 0
 #define ID_8SERVO_UNIT_1 1      // PA_HUB 1 : 8Servo Unit 1
+
+#define USE_NUMERICAL_CALCULATION  // Comment out to use table-based method
 
 // Utility
 #if 0
@@ -102,7 +105,7 @@ unsigned long current_ms = 0;
 const uint64_t TIMER_MOTION_INTERVAL_US = 50000;     // interval : 50ms
 hw_timer_t *timerMotion = NULL;
 bool motion_trigger = false;
-void IRAM_ATTR onTimerMotion()
+void IRAM_ATTR onTimerMotion(void)
 {
     if(motion_trigger)  // block multiple events
         return;
@@ -230,6 +233,26 @@ void MotionIdle()
     setServoAngle(BR_Foot, pos_idle + random(-10, 10));
 }
 
+#ifdef USE_NUMERICAL_CALCULATION
+const float WALK_STEP_HEIGHT = 30.0;     // Maximum height of leg lift during step (degrees)
+const float WALK_STRIDE_LENGTH = 30.0;   // Forward/backward movement range (degrees)
+const float WALK_NEUTRAL_LEG = 90.0;     // Neutral position for leg servos
+const float WALK_NEUTRAL_FOOT = 60.0;    // Neutral position for foot servos
+const float WALK_FOOT_GROUND = 75.0;     // Foot angle when on ground
+const unsigned long WALK_CYCLE_DURATION = 2000; // Walking cycle duration in milliseconds
+
+const bool LEG_IN_GROUP1[NUM_LEGS] = {
+    true,   // FrontL
+    false,  // FrontR
+    false,  // CenterL
+    true,   // CenterR
+    true,   // BackL
+    false   // BackR
+};
+
+unsigned long walkStartTime = 0;
+#endif
+
 static uint8_t count;
 static int8_t polarity = +1;
 void MotionStretching()
@@ -308,8 +331,73 @@ float pattern_walk[][1+NUM_LEG_STRUCTURE*NUM_LEGS] = {
 
 int count_max = sizeof(pattern_walk) / sizeof(pattern_walk[0]);
 
+#ifdef USE_NUMERICAL_CALCULATION
+float constrainServoAngle(float angle) {
+    if (angle < 45.0) return 45.0;
+    if (angle > 135.0) return 135.0;
+    return angle;
+}
+
+void calculateTripodGait(float phase, bool isGroup1, float& legAngle, float& footAngle) {
+    if ((isGroup1 && phase < 0.5) || (!isGroup1 && phase >= 0.5)) {
+        float liftPhase;
+        
+        if (isGroup1) {
+            liftPhase = phase * 2.0; // 0.0 to 1.0 during first half of cycle
+        } else {
+            liftPhase = (phase - 0.5) * 2.0; // 0.0 to 1.0 during second half of cycle
+        }
+        
+        float legProgress = sin(liftPhase * PI);
+        
+        legAngle = WALK_NEUTRAL_LEG - WALK_STRIDE_LENGTH/2 + WALK_STRIDE_LENGTH * legProgress;
+        footAngle = WALK_NEUTRAL_FOOT - WALK_STEP_HEIGHT * sin(liftPhase * PI);
+    } 
+    else {
+        float groundPhase;
+        
+        if (isGroup1) {
+            groundPhase = (phase - 0.5) * 2.0; // 0.0 to 1.0 during second half of cycle
+        } else {
+            groundPhase = phase * 2.0; // 0.0 to 1.0 during first half of cycle
+        }
+        
+        legAngle = WALK_NEUTRAL_LEG + WALK_STRIDE_LENGTH/2 - WALK_STRIDE_LENGTH * groundPhase;
+        footAngle = WALK_FOOT_GROUND;
+    }
+    
+    legAngle = constrainServoAngle(legAngle);
+    footAngle = constrainServoAngle(footAngle);
+}
+#endif
+
 void MotionWalk()
 {
+#ifdef USE_NUMERICAL_CALCULATION
+    // Numerical calculation method
+    if (walkStartTime == 0) {
+        walkStartTime = millis();
+    }
+    
+    unsigned long currentTime = millis();
+    unsigned long elapsedTime = currentTime - walkStartTime;
+    float phase = (elapsedTime % WALK_CYCLE_DURATION) / (float)WALK_CYCLE_DURATION;
+    
+    Serial.printf("[DEBUG] Phase: %.3f, ", phase);
+    
+    for (int leg = 0; leg < NUM_LEGS; leg++) {
+        float legAngle, footAngle;
+        
+        calculateTripodGait(phase, LEG_IN_GROUP1[leg], legAngle, footAngle);
+        
+        setServoAngle(Leg + leg * NUM_LEG_STRUCTURE, legAngle);
+        setServoAngle(Foot + leg * NUM_LEG_STRUCTURE, footAngle);
+        
+        Serial.printf("%.3f,%.3f,", legAngle, footAngle);
+    }
+    Serial.printf("\n");
+#else
+    // Table-based method (original)
     Serial.printf("[DEBUG] %d, ", int(pattern_walk[count][0]));
     for(int leg=0; leg<NUM_LEGS;leg++) {
         for(int joint=0; joint<NUM_LEG_STRUCTURE; joint++) {
@@ -322,6 +410,7 @@ void MotionWalk()
     count++;
     if(count >= count_max)
         count = 0;
+#endif
 }
 
 void MotionTapping()
