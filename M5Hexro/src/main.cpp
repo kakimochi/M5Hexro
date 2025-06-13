@@ -1,4 +1,5 @@
 #include <M5Unified.h>
+#include <math.h>
 
 // PA HUB
 #include <Wire.h>
@@ -232,6 +233,30 @@ void MotionIdle()
 
 static uint8_t count;
 static int8_t polarity = +1;
+
+// Walking motion parameters
+typedef struct {
+    float step_height;      // Maximum lift height for legs (degrees)
+    float step_length;      // Step length range (degrees)  
+    float base_leg_angle;   // Base angle for leg joints (degrees)
+    float base_foot_angle;  // Base angle for foot joints (degrees)
+    float cycle_time_ms;    // Complete walk cycle time (milliseconds)
+    float frequency;        // Walking frequency (cycles per second)
+} WalkParams;
+
+// Default walking parameters
+static WalkParams walk_params = {
+    .step_height = 15.0f,     // 15 degree lift
+    .step_length = 25.0f,     // 25 degree swing range
+    .base_leg_angle = 90.0f,  // Center position for legs
+    .base_foot_angle = 60.0f, // Center position for feet  
+    .cycle_time_ms = 2500.0f, // 2.5 second cycle
+    .frequency = 0.4f         // 0.4 Hz
+};
+
+// Walking state
+static unsigned long walk_start_time = 0;
+static bool walk_initialized = false;
 void MotionStretching()
 {
     const uint8_t step = 2;
@@ -253,81 +278,122 @@ void MotionStretching()
     }
 }
 
-float pattern_walk[][1+NUM_LEG_STRUCTURE*NUM_LEGS] = {
-    { 0 ,90.0,61.812,66.206,75.879,90.0,61.812,116.565,60.301,90.0,61.812,80.104,63.008 },
-    { 1 ,86.414,52.743,66.499,75.749,91.898,53.936,116.384,60.315,91.702,51.918,80.157,62.918 },
-    { 2 ,82.912,43.688,67.361,75.36,93.986,46.319,115.841,60.355,93.213,42.614,80.319,62.658 },
-    { 3 ,79.571,35.268,68.739,74.713,96.248,39.3,114.933,60.424,94.539,34.747,80.59,62.258 },
-    { 4 ,76.457,28.292,70.555,73.814,98.653,33.46,113.661,60.526,95.691,29.024,80.976,61.767 },
-    { 5 ,73.622,23.529,72.708,72.676,101.151,29.67,112.024,60.662,96.681,25.794,81.481,61.241 },
-    { 6 ,71.105,21.464,75.088,71.331,103.671,28.93,110.026,60.829,97.52,25.049,82.114,60.741 },
-    { 7 ,68.93,22.214,77.587,69.824,106.123,31.894,107.678,61.02,98.219,26.579,82.881,60.332 },
-    { 8 ,67.112,25.597,80.106,68.219,108.404,38.24,104.998,61.225,98.787,30.109,83.795,60.069 },
-    { 9 ,65.657,31.213,82.565,66.592,110.402,46.627,102.018,61.426,99.231,35.358,84.864,60.005 },
-    { 10 ,64.568,38.513,84.903,65.021,112.01,55.549,98.783,61.602,99.559,42.038,86.102,60.181 },
-    { 11 ,63.842,46.893,87.081,63.583,113.139,64.133,95.352,61.733,99.775,49.847,87.519,60.625 },
-    { 12 ,63.48,55.797,89.076,62.343,113.72,72.117,91.798,61.803,99.883,58.477,89.124,61.347 },
-    { 13 ,63.48,60.305,89.076,57.856,113.72,75.846,91.798,57.305,99.883,62.986,89.124,56.842 },
-    { 14 ,63.842,60.331,87.081,50.078,113.139,75.587,95.352,48.181,99.775,62.807,87.519,47.139 },
-    { 15 ,64.568,60.386,84.903,42.705,112.01,75.069,98.783,39.35,99.559,62.473,86.102,38.45 },
-    { 16 ,65.657,60.471,82.565,36.185,110.402,74.294,102.018,31.547,99.231,62.021,84.864,31.586 },
-    { 17 ,67.112,60.59,80.106,31.245,108.404,73.273,104.998,25.595,98.787,61.504,83.795,27.091 },
-    { 18 ,68.93,60.742,77.587,28.862,106.123,72.027,107.678,22.144,98.219,60.984,82.881,25.121 },
-    { 19 ,71.105,60.922,75.088,29.941,103.671,70.594,110.026,21.492,97.52,60.522,82.114,25.546 },
-    { 20 ,73.622,61.122,72.708,34.711,101.151,69.03,112.024,23.597,96.681,60.179,81.481,28.111 },
-    { 21 ,76.457,61.327,70.555,42.282,98.653,67.404,113.661,28.157,95.691,60.01,80.976,32.536 },
-    { 22 ,79.571,61.518,68.739,51.094,96.248,65.794,114.933,34.69,94.539,60.061,80.59,38.538 },
-    { 23 ,82.912,61.674,67.361,59.91,93.986,64.281,115.841,42.605,93.213,60.368,80.319,45.821 },
-    { 24 ,86.414,61.777,66.499,68.202,91.898,62.935,116.384,51.31,91.702,60.951,80.157,54.078 },
-    { 25 ,90.0,61.812,66.206,75.879,90.0,61.812,116.565,60.301,90.0,61.812,80.104,63.008 },
-    { 26 ,86.414,52.743,66.499,75.749,91.898,53.936,116.384,60.315,91.702,51.918,80.157,62.918 },
-    { 27 ,82.912,43.688,67.361,75.36,93.986,46.319,115.841,60.355,93.213,42.614,80.319,62.658 },
-    { 28 ,79.571,35.268,68.739,74.713,96.248,39.3,114.933,60.424,94.539,34.747,80.59,62.258 },
-    { 29 ,76.457,28.292,70.555,73.814,98.653,33.46,113.661,60.526,95.691,29.024,80.976,61.767 },
-    { 30 ,73.622,23.529,72.708,72.676,101.151,29.67,112.024,60.662,96.681,25.794,81.481,61.241 },
-    { 31 ,71.105,21.464,75.088,71.331,103.671,28.93,110.026,60.829,97.52,25.049,82.114,60.741 },
-    { 32 ,68.93,22.214,77.587,69.824,106.123,31.894,107.678,61.02,98.219,26.579,82.881,60.332 },
-    { 33 ,67.112,25.597,80.106,68.219,108.404,38.24,104.998,61.225,98.787,30.109,83.795,60.069 },
-    { 34 ,65.657,31.213,82.565,66.592,110.402,46.627,102.018,61.426,99.231,35.358,84.864,60.005 },
-    { 35 ,64.568,38.513,84.903,65.021,112.01,55.549,98.783,61.602,99.559,42.038,86.102,60.181 },
-    { 36 ,63.842,46.893,87.081,63.583,113.139,64.133,95.352,61.733,99.775,49.847,87.519,60.625 },
-    { 37 ,63.48,55.797,89.076,62.343,113.72,72.117,91.798,61.803,99.883,58.477,89.124,61.347 },
-    { 38 ,63.48,60.305,89.076,57.856,113.72,75.846,91.798,57.305,99.883,62.986,89.124,56.842 },
-    { 39 ,63.842,60.331,87.081,50.078,113.139,75.587,95.352,48.181,99.775,62.807,87.519,47.139 },
-    { 40 ,64.568,60.386,84.903,42.705,112.01,75.069,98.783,39.35,99.559,62.473,86.102,38.45 },
-    { 41 ,65.657,60.471,82.565,36.185,110.402,74.294,102.018,31.547,99.231,62.021,84.864,31.586 },
-    { 42 ,67.112,60.59,80.106,31.245,108.404,73.273,104.998,25.595,98.787,61.504,83.795,27.091 },
-    { 43 ,68.93,60.742,77.587,28.862,106.123,72.027,107.678,22.144,98.219,60.984,82.881,25.121 },
-    { 44 ,71.105,60.922,75.088,29.941,103.671,70.594,110.026,21.492,97.52,60.522,82.114,25.546 },
-    { 45 ,73.622,61.122,72.708,34.711,101.151,69.03,112.024,23.597,96.681,60.179,81.481,28.111 },
-    { 46 ,76.457,61.327,70.555,42.282,98.653,67.404,113.661,28.157,95.691,60.01,80.976,32.536 },
-    { 47 ,79.571,61.518,68.739,51.094,96.248,65.794,114.933,34.69,94.539,60.061,80.59,38.538 },
-    { 48 ,82.912,61.674,67.361,59.91,93.986,64.281,115.841,42.605,93.213,60.368,80.319,45.821 },
-    { 49 ,86.414,61.777,66.499,68.202,91.898,62.935,116.384,51.31,91.702,60.951,80.157,54.078 },
-};
+// Leg grouping for tripod gait
+// Group 1: FL, CR, BL (move together)
+// Group 2: FR, CL, BR (move together) 
+typedef enum {
+    TRIPOD_GROUP_1 = 0,
+    TRIPOD_GROUP_2 = 1
+} TripodGroup;
 
-int count_max = sizeof(pattern_walk) / sizeof(pattern_walk[0]);
+// Get tripod group for each leg
+TripodGroup getLegTripodGroup(LegLayout leg) {
+    switch(leg) {
+        case FrontL:
+        case CenterR:
+        case BackL:
+            return TRIPOD_GROUP_1;
+        case FrontR:
+        case CenterL:
+        case BackR:
+            return TRIPOD_GROUP_2;
+        default:
+            return TRIPOD_GROUP_1;
+    }
+}
+
+// Calculate leg position based on gait phase
+void calculateLegPosition(LegLayout leg, float phase, float* leg_angle, float* foot_angle) {
+    TripodGroup group = getLegTripodGroup(leg);
+    
+    // Offset phase for second tripod group
+    float adjusted_phase = phase;
+    if (group == TRIPOD_GROUP_2) {
+        adjusted_phase = fmod(phase + 0.5f, 1.0f);  // 180 degree phase offset
+    }
+    
+    // Calculate vertical (foot) motion - sinusoidal lift
+    float lift_phase = sin(adjusted_phase * 2.0f * PI);
+    if (lift_phase < 0) lift_phase = 0;  // Only lift, don't push down
+    
+    // Calculate horizontal (leg) motion - sinusoidal swing
+    float swing_phase = cos(adjusted_phase * 2.0f * PI);
+    
+    // Apply motion to servo angles
+    *leg_angle = walk_params.base_leg_angle + (swing_phase * walk_params.step_length);
+    *foot_angle = walk_params.base_foot_angle - (lift_phase * walk_params.step_height);
+    
+    // Ensure angles stay within safe limits
+    *leg_angle = constrain(*leg_angle, 45.0f, 135.0f);
+    *foot_angle = constrain(*foot_angle, 45.0f, 135.0f);
+}
 
 void MotionWalk()
 {
-    Serial.printf("[DEBUG] %d, ", int(pattern_walk[count][0]));
-    for(int leg=0; leg<NUM_LEGS;leg++) {
-        for(int joint=0; joint<NUM_LEG_STRUCTURE; joint++) {
-            Serial.printf("%.3f,", pattern_walk[count][1+joint+leg*NUM_LEG_STRUCTURE]);
-            setServoAngle(joint+leg*NUM_LEG_STRUCTURE, pattern_walk[count][1+joint+leg*NUM_LEG_STRUCTURE]);
+    // Initialize walk timing on first call
+    if (!walk_initialized) {
+        walk_start_time = millis();
+        walk_initialized = true;
+        Serial.printf("[INFO] Mathematical walking motion initialized\n");
+    }
+    
+    // Calculate current phase in walk cycle (0.0 to 1.0)
+    unsigned long current_time = millis();
+    unsigned long elapsed_time = current_time - walk_start_time;
+    float phase = fmod((float)elapsed_time / walk_params.cycle_time_ms, 1.0f);
+    
+    Serial.printf("[DEBUG] Phase: %.3f, Time: %lu, ", phase, elapsed_time);
+    
+    // Calculate and set servo angles for each leg
+    for(int leg = 0; leg < NUM_LEGS; leg++) {
+        float leg_angle, foot_angle;
+        calculateLegPosition((LegLayout)leg, phase, &leg_angle, &foot_angle);
+        
+        // Map leg enum to servo channels
+        uint8_t leg_servo_ch, foot_servo_ch;
+        switch(leg) {
+            case FrontL:
+                leg_servo_ch = FL_Leg;
+                foot_servo_ch = FL_Foot;
+                break;
+            case FrontR:
+                leg_servo_ch = FR_Leg;
+                foot_servo_ch = FR_Foot;
+                break;
+            case CenterL:
+                leg_servo_ch = CL_Leg;
+                foot_servo_ch = CL_Foot;
+                break;
+            case CenterR:
+                leg_servo_ch = CR_Leg;
+                foot_servo_ch = CR_Foot;
+                break;
+            case BackL:
+                leg_servo_ch = BL_Leg;
+                foot_servo_ch = BL_Foot;
+                break;
+            case BackR:
+                leg_servo_ch = BR_Leg;
+                foot_servo_ch = BR_Foot;
+                break;
+            default:
+                continue;
         }
+        
+        // Set servo angles
+        setServoAngle(leg_servo_ch, (uint8_t)leg_angle);
+        setServoAngle(foot_servo_ch, (uint8_t)foot_angle);
+        
+        Serial.printf("L%d:%.1f,%.1f ", leg, leg_angle, foot_angle);
     }
     Serial.printf("\n");
- 
-    count++;
-    if(count >= count_max)
-        count = 0;
 }
 
 void MotionTapping()
 {
     const int pos_init = 90;
     const int pos_idle = 60;
+    const uint8_t count_max = 11;  // Define count_max for tapping motion
 
     setServoAngle(FL_Leg,  pos_init);
     setServoAngle(FR_Leg,  pos_init);
@@ -362,6 +428,34 @@ void MotionTapping()
     } else {
         count--;
     }
+}
+
+// Walking motion utility functions
+void resetWalkingMotion() {
+    walk_initialized = false;
+    walk_start_time = 0;
+    Serial.printf(\"[INFO] Walking motion reset\\n\");
+}
+
+void setWalkingSpeed(float speed_multiplier) {
+    if (speed_multiplier > 0.1f && speed_multiplier <= 3.0f) {
+        walk_params.cycle_time_ms = 2500.0f / speed_multiplier;
+        walk_params.frequency = 0.4f * speed_multiplier;
+        resetWalkingMotion();
+        Serial.printf(\"[INFO] Walking speed set to %.1fx (cycle: %.0fms)\\n\", 
+                     speed_multiplier, walk_params.cycle_time_ms);
+    }
+}
+
+void setWalkingParameters(float step_height, float step_length) {
+    if (step_height >= 5.0f && step_height <= 30.0f) {
+        walk_params.step_height = step_height;
+    }
+    if (step_length >= 10.0f && step_length <= 40.0f) {
+        walk_params.step_length = step_length;
+    }
+    Serial.printf(\"[INFO] Walking parameters: height=%.1f, length=%.1f\\n\", 
+                 walk_params.step_height, walk_params.step_length);
 }
 
 void gui_disp_batterylevel()
