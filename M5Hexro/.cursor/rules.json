@@ -1,0 +1,59 @@
+{
+  "rules": [
+    {
+      "name": "Issue and PR Workflow",
+      "description": "Standard workflow for creating issues and pull requests",
+      "steps": [
+        {
+          "name": "Create Issue",
+          "trigger": "User says 'issue作成してください'",
+          "actions": [
+            "Create a structured markdown issue in English",
+            "Include detailed sections: Overview, Changes, Implementation, Testing, etc.",
+            "Add appropriate labels"
+          ]
+        },
+        {
+          "name": "Implement Changes",
+          "trigger": "After issue creation",
+          "actions": [
+            "Implement the requested changes",
+            "Follow coding standards and best practices",
+            "Add necessary tests",
+            "Update documentation if needed"
+          ]
+        },
+        {
+          "name": "Create Pull Request",
+          "trigger": "After implementation",
+          "actions": [
+            "Create a structured markdown PR",
+            "Reference the related issue",
+            "Include detailed change descriptions",
+            "Document test results and verifications"
+          ]
+        },
+        {
+          "name": "Quality Checks",
+          "trigger": "Throughout the process",
+          "actions": [
+            "Verify code quality",
+            "Ensure test coverage",
+            "Check documentation completeness",
+            "Maintain backward compatibility"
+          ]
+        }
+      ],
+      "templates": {
+        "issue": {
+          "title": "Issue Title",
+          "body": "# Overview\n\n## Changes\n\n## Implementation\n\n## Testing\n\n## Additional Information"
+        },
+        "pr": {
+          "title": "PR Title",
+          "body": "# Overview\n\n## Changes\n\n### Implementation Details\n\n## Testing\n\n## Related Information"
+        }
+      }
+    }
+  ]
+} 
