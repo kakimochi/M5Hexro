@@ -310,18 +310,53 @@ int count_max = sizeof(pattern_walk) / sizeof(pattern_walk[0]);
 
 void MotionWalk()
 {
-    Serial.printf("[DEBUG] %d, ", int(pattern_walk[count][0]));
-    for(int leg=0; leg<NUM_LEGS;leg++) {
-        for(int joint=0; joint<NUM_LEG_STRUCTURE; joint++) {
-            Serial.printf("%.3f,", pattern_walk[count][1+joint+leg*NUM_LEG_STRUCTURE]);
-            setServoAngle(joint+leg*NUM_LEG_STRUCTURE, pattern_walk[count][1+joint+leg*NUM_LEG_STRUCTURE]);
+    const float step_height = 30.0f;  // 脚の上げ下げの高さ
+    const float step_forward = 20.0f;  // 前進量
+    const float cycle = 50.0f;        // 1周期のステップ数
+    const float phase_offset = cycle / 6.0f;  // 各脚の位相差
+    const float ground_ratio = 0.6f;  // 接地時間の割合（0.0～1.0）
+
+    // 現在のステップ位置を計算（0～cycle-1）
+    float step = fmod(count, cycle);
+    
+    // 各脚の位置を計算
+    for(int leg = 0; leg < NUM_LEGS; leg++) {
+        // 脚の位相を計算（0～cycle-1）
+        float leg_phase = fmod(step + leg * phase_offset, cycle);
+        
+        // 脚の上げ下げの高さを計算（0～step_height）
+        float height = 0.0f;
+        float normalized_phase = leg_phase / cycle;
+        
+        if(normalized_phase < ground_ratio) {
+            // 接地期間：低い位置を維持
+            height = 0.0f;
+        } else {
+            // 空中期間：放物線的な動き
+            float air_phase = (normalized_phase - ground_ratio) / (1.0f - ground_ratio);
+            height = step_height * sin(M_PI * air_phase);
         }
+        
+        // 脚の前後位置を計算（-step_forward/2～step_forward/2）
+        float forward = step_forward * (normalized_phase - 0.5f);
+        
+        // 脚の角度を計算（45～135度の範囲に収める）
+        float leg_angle = 90.0f + forward;
+        float foot_angle = 90.0f - height;
+        
+        // 角度を制限
+        leg_angle = constrain(leg_angle, 45.0f, 135.0f);
+        foot_angle = constrain(foot_angle, 45.0f, 135.0f);
+        
+        // サーボに角度を設定
+        setServoAngle(leg * 2, leg_angle);
+        setServoAngle(leg * 2 + 1, foot_angle);
     }
-    Serial.printf("\n");
- 
+    
     count++;
-    if(count >= count_max)
+    if(count >= cycle) {
         count = 0;
+    }
 }
 
 void MotionTapping()
